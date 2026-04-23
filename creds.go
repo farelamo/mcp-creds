@@ -95,28 +95,31 @@ var envMappingItem = regexp.MustCompile(`^(\s+)([A-Za-z_]\w*)\s*:\s*(.+)$`)
 // the same or lesser indent as "environment:" appears, the block ends.
 func redactDockerComposeEnv(s string) string {
 	lines := strings.Split(s, "\n")
+	var result []string
 	inEnvBlock := false
 	envIndent := 0 // indentation level of the "environment:" line
 
-	for i, line := range lines {
+	for _, line := range lines {
 		if m := envBlockHeader.FindStringSubmatch(line); m != nil {
 			inEnvBlock = true
 			envIndent = len(m[1])
+			result = append(result, m[1]+"environment: [REDACTED]")
 			continue
 		}
 
 		if !inEnvBlock {
+			result = append(result, line)
 			continue
 		}
 
 		trimmed := strings.TrimRight(line, " \t\r")
-		// blank line — keep inside block
+		// blank line inside block — drop it
 		if trimmed == "" {
 			continue
 		}
 
-		// comment line — keep inside block
 		stripped := strings.TrimLeft(trimmed, " \t")
+		// comment line inside block — drop it
 		if strings.HasPrefix(stripped, "#") {
 			continue
 		}
@@ -127,17 +130,12 @@ func redactDockerComposeEnv(s string) string {
 		// if indent <= envIndent, we've left the environment block
 		if lineIndent <= envIndent {
 			inEnvBlock = false
+			result = append(result, line)
 			continue
 		}
-
-		// inside the block — redact value in list or mapping form
-		if m := envListItem.FindStringSubmatch(line); m != nil {
-			lines[i] = m[1] + m[2] + "=[REDACTED]"
-		} else if m := envMappingItem.FindStringSubmatch(line); m != nil {
-			lines[i] = m[1] + m[2] + ": [REDACTED]"
-		}
+		// inside the block — drop the line entirely
 	}
-	return strings.Join(lines, "\n")
+	return strings.Join(result, "\n")
 }
 
 // ── Dockerfile ENV / ARG redaction ────────────────────────────────────────────
