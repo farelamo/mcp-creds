@@ -78,6 +78,37 @@ func Sanitize(s string) string {
 	return s
 }
 
+// SanitizePreserve works like Sanitize but protects specific values from
+// being redacted. Use this when a tool result intentionally contains a
+// credential-like value that the user needs (e.g. an InPrivy sharing
+// password). Each value in preserve is temporarily replaced with a
+// placeholder before redaction, then restored afterwards.
+func SanitizePreserve(s string, preserve ...string) string {
+	// Replace preserved values with numbered placeholders.
+	holders := make([]string, len(preserve))
+	for i, v := range preserve {
+		if v == "" {
+			continue
+		}
+		holders[i] = fmt.Sprintf("\x00PRESERVE_%d\x00", i)
+		s = strings.ReplaceAll(s, v, holders[i])
+	}
+
+	// Run normal redaction.
+	for _, p := range redactPatterns {
+		s = p.ReplaceAllString(s, "[REDACTED]")
+	}
+
+	// Restore preserved values.
+	for i, v := range preserve {
+		if v == "" {
+			continue
+		}
+		s = strings.ReplaceAll(s, holders[i], v)
+	}
+	return s
+}
+
 // ── Build log sanitization ────────────────────────────────────────────────────
 
 // envBlockHeader matches the "environment:" key in a Docker Compose YAML file.
